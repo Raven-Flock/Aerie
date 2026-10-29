@@ -19,6 +19,7 @@ import {
 } from "@/aerie/model";
 import { ensureBuffer, getBuffer } from "@/aerie/buffers";
 import { encodeWav } from "@/aerie/wav";
+import { loopSampleCount, wrapLoopTail } from "@/aerie/loop-seam";
 import { makeImpulse, playNote, woodClick, type Knobs, type Voice } from "@/aerie/sound";
 
 export type Transport = "stopped" | "playing" | "recording" | "countin";
@@ -254,8 +255,11 @@ export function renderWav(project: Project, masterVol: number, opts?: RenderOpts
   const region = opts?.region && opts.region.end > opts.region.start + 0.05 ? opts.region : null;
   const endBeat = region ? region.end - region.start : Math.min(songBeats(project), Math.max(songEnd(project), project.timeSig));
   const beats = Math.max(project.timeSig, Math.min(endBeat, project.bpm * 4));
-  const seconds = beats * (60 / project.bpm) + 0.25;
   const sampleRate = 44100;
+  // Loop/region (Game pack beds, stems): render loop + LOOP_TAIL_PAD, then wrap the tail into the head
+  // and truncate to the exact loop sample count. Full-song (no region) keeps a 0.25 s one-shot tail pad.
+  const loopSamples = region ? loopSampleCount(beats, project.bpm, sampleRate) : 0;
+  const seconds = beats * (60 / project.bpm) + (region ? LOOP_TAIL_PAD : 0.25);
   const ctx = new OfflineAudioContext(2, Math.ceil(seconds * sampleRate), sampleRate);
   const shifted = region
     ? {
@@ -288,7 +292,14 @@ export function renderWav(project: Project, masterVol: number, opts?: RenderOpts
   }).then((buffer) => {
     if (opts?.signal?.aborted || token !== renderToken) throw new Error("cancelled");
     opts?.onProgress?.("write", 0.72);
-    return writeWav(buffer, token, opts);
+    let left = buffer.getChannelData(0).slice();
+    let right = (buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : buffer.getChannelData(0)).slice();
+    if (region) {
+      // No fadeTail on loop exports: seam continuity comes from the wrap, not a fade to silence.
+      left = wrapLoopTail(left, loopSamples);
+      right = wrapLoopTail(right, loopSamples);
+    }
+    return writeWav(left, right, buffer.sampleRate, token, opts);
   });
 }
 
@@ -309,15 +320,15 @@ export async function renderStems(
   return out;
 }
 
-function writeWav(buffer: AudioBuffer, token: number, opts?: RenderOpts): Promise<Blob> {
-  const left = buffer.getChannelData(0).slice();
-  const right = (buffer.numberOfChannels > 1 ? buffer.getChannelData(1) : buffer.getChannelData(0)).slice();
+const LOOP_TAIL_PAD = 2;
+
+function writeWav(left: Float32Array, right: Float32Array, rate: number, token: number, opts?: RenderOpts): Promise<Blob> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(URL.createObjectURL(new Blob([WORKER_SRC], { type: "text/javascript" })));
     renderWorker = worker;
     const timer = window.setTimeout(() => {
       worker.terminate();
-      resolve(new Blob([encodeWav([left, right], buffer.sampleRate)], { type: "audio/wav" }));
+      resolve(new Blob([encodeWav([left, right], rate)], { type: "audio/wav" }));
     }, 8000);
     worker.onmessage = (ev: MessageEvent<ArrayBuffer>) => {
       window.clearTimeout(timer);
@@ -332,9 +343,9 @@ function writeWav(buffer: AudioBuffer, token: number, opts?: RenderOpts): Promis
     worker.onerror = () => {
       window.clearTimeout(timer);
       worker.terminate();
-      resolve(new Blob([encodeWav([left, right], buffer.sampleRate)], { type: "audio/wav" }));
+      resolve(new Blob([encodeWav([left, right], rate)], { type: "audio/wav" }));
     };
-    worker.postMessage({ left, right, rate: buffer.sampleRate }, [left.buffer, right.buffer]);
+    worker.postMessage({ left, right, rate }, [left.buffer, right.buffer]);
   });
 }
 
