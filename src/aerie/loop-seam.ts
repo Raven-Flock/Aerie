@@ -14,3 +14,12 @@ export function wrapLoopTail(data: Float32Array<ArrayBuffer>, loopSamples: numbe
   for (let i = n; i < data.length; i++) out[i % n] += data[i];
   return out;
 }
+
+/**
+ * Clip fade envelope applied to note velocity during offline render.
+ * Loop/region exports (Game-pack beds, stems) skip clip fadeIn/fadeOut so beat 0 is not
+ * silenced on every wrap; full-song export and live playback keep the fade.
+ */
+export function noteFadeGain(fade: number, loopExport: boolean): number {
+  return loopExport ? 1 : fade;
+}

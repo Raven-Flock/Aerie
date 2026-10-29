@@ -19,7 +19,7 @@ import {
 } from "@/aerie/model";
 import { ensureBuffer, getBuffer } from "@/aerie/buffers";
 import { encodeWav } from "@/aerie/wav";
-import { loopSampleCount, wrapLoopTail } from "@/aerie/loop-seam";
+import { loopSampleCount, wrapLoopTail, noteFadeGain } from "@/aerie/loop-seam";
 import { makeImpulse, playNote, woodClick, type Knobs, type Voice } from "@/aerie/sound";
 
 export type Transport = "stopped" | "playing" | "recording" | "countin";
@@ -282,7 +282,7 @@ export function renderWav(project: Project, masterVol: number, opts?: RenderOpts
         }),
       );
     } else {
-      scheduleClip(ctx, input, clip, track, 0, beats, 0.02, shifted.bpm, shifted.swing ?? 0);
+      scheduleClip(ctx, input, clip, track, 0, beats, 0.02, shifted.bpm, shifted.swing ?? 0, !!region);
     }
   }
   return Promise.all(jobs).then(() => {
@@ -458,6 +458,7 @@ function scheduleClip(
   origin: number,
   bpm: number,
   swing: number,
+  loopExport = false,
 ) {
   const spb = 60 / bpm;
   const drum = track.kind === "drums";
@@ -465,7 +466,9 @@ function scheduleClip(
     const beat = swingBeat(abs, swing, drum);
     const when = Math.max(ctx.currentTime, origin + beat * spb);
     const dur = Math.max(0.05, note.duration * spb);
-    playNote(ctx, dest, when, note.pitch, note.velocity * fadeAt(clip, abs), dur, track.kind, track.preset, clipKnobs(track, clip, abs), clip.articulation ?? "legato");
+    // Loop/region export: no clip fade envelope on notes (QA PR #2 gate 2 — beat-0 dip each wrap).
+    const fade = noteFadeGain(fadeAt(clip, abs), loopExport);
+    playNote(ctx, dest, when, note.pitch, note.velocity * fade, dur, track.kind, track.preset, clipKnobs(track, clip, abs), clip.articulation ?? "legato");
   });
 }
 

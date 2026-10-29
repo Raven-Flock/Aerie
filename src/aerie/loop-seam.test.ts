@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { loopSampleCount, wrapLoopTail } from "./loop-seam.ts";
+import { loopSampleCount, wrapLoopTail, noteFadeGain } from "./loop-seam.ts";
 
 test("loop length is sample-exact, no +0.25 s pad", () => {
   assert.equal(loopSampleCount(16, 72, 44100), Math.round(16 * (60 / 72) * 44100));
@@ -29,4 +29,11 @@ test("wrapped sustained tone is continuous across seam", () => {
   const jump = Math.abs(out[0] - out[loop - 1]);
   const step = Math.abs(out[1] - out[0]);
   assert.ok(jump <= step * 1.5, `seam jump ${jump} vs step ${step}`);
+});
+
+test("loop/region export ignores clip fade on notes; full-song keeps it", () => {
+  assert.equal(noteFadeGain(0, true), 1);
+  assert.equal(noteFadeGain(0.4, true), 1);
+  assert.equal(noteFadeGain(0, false), 0);
+  assert.equal(noteFadeGain(0.4, false), 0.4);
 });
