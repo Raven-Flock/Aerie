@@ -542,17 +542,17 @@ export function tendBed(): Project {
     note(31, 24, 7.5, 0.5),
   ];
   const padClip = makeClip(pad.id, "Pad hold", 0, 32, 32, padNotes, true);
-  padClip.fadeIn = 0.5;
-  padClip.fadeOut = 0.5;
+  padClip.fadeIn = 0;
+  padClip.fadeOut = 0;
   const keysClip = makeClip(keys.id, "Soft chords", 0, 32, 32, epNotes, true);
-  keysClip.fadeIn = 0.25;
-  keysClip.fadeOut = 0.35;
+  keysClip.fadeIn = 0;
+  keysClip.fadeOut = 0;
   const sparkClip = makeClip(sparks.id, "Sparks", 0, 32, 32, sparkNotes, true);
-  sparkClip.fadeIn = 0.05;
-  sparkClip.fadeOut = 0.15;
+  sparkClip.fadeIn = 0;
+  sparkClip.fadeOut = 0;
   const pedalClip = makeClip(pedal.id, "Pedal", 0, 32, 32, pedalNotes, true);
-  pedalClip.fadeIn = 0.4;
-  pedalClip.fadeOut = 0.4;
+  pedalClip.fadeIn = 0;
+  pedalClip.fadeOut = 0;
   return fillProject({
     v: 1,
     title: "Tend bed",
